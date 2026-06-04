@@ -1,0 +1,16 @@
+# Ignorar arquivos de credenciais de nuvem (Segurança Crítica)
+credenciais.json
+*.json
+
+# Ignorar arquivos locais de teste e arquivos temporários do Windows
+Acesso Online.txt
+Acesso Online.TXT
+*.zip
+Thumbs.db
+Desktop.ini
+
+# Ignorar pastas de ambiente virtual do Python ou cache
+__pycache__/
+*.pyc
+.venv/
+env/
