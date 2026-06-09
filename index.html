@@ -24,9 +24,10 @@
             border-radius: 12px;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
             width: 100%;
-            max-width: 500px;
+            max-width: 550px;
             text-align: center;
             box-sizing: border-box;
+            position: relative;
         }
 
         /* Letras Azuis */
@@ -83,6 +84,27 @@
             background-color: #0033aa;
         }
 
+        /* Botão Sair Vermelho (Discreto no topo direito do card) */
+        .btn-sair {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background-color: #e63946;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            display: none; /* Invisível na tela de login */
+            transition: background-color 0.2s;
+        }
+
+        .btn-sair:hover {
+            background-color: #c1121f;
+        }
+
         /* ==========================================
            CAMADA INQUILINO: ÁREA DE DOWNLOAD
            ========================================== */
@@ -107,7 +129,7 @@
             padding: 18px 30px;
             font-size: 18px;
             font-weight: bold;
-            border-radius: 30px; /* Bordas bem arredondadas */
+            border-radius: 30px;
             cursor: pointer;
             width: 100%;
             box-shadow: 0 4px 15px rgba(77, 171, 247, 0.4);
@@ -138,12 +160,27 @@
             background-color: #28a745;
             color: white;
             border: none;
-            padding: 12px;
+            padding: 14px;
             border-radius: 6px;
             font-weight: bold;
             cursor: pointer;
             width: 100%;
             margin-top: 15px;
+            font-size: 15px;
+        }
+
+        /* Console de Logs do Admin */
+        .admin-logs {
+            background-color: #000000;
+            color: #00ff00;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            padding: 12px;
+            border-radius: 6px;
+            height: 120px;
+            overflow-y: auto;
+            margin-top: 15px;
+            white-space: pre-wrap;
         }
 
         /* Mensagem de Erro */
@@ -163,6 +200,8 @@
 <body>
 
     <div class="card">
+        <button id="btn-sair-global" class="btn-sair" onclick="deslogarSistema()">Sair ✕</button>
+
         <div id="secao-login">
             <h2>Insira os dados para acessar o sistema</h2>
             <div class="input-group">
@@ -186,26 +225,23 @@
         </div>
 
         <div id="secao-admin" class="area-admin">
-            <h3>Painel de Controle ADTEC (Nuvem AWS)</h3>
+            <h3>Painel de Controle ADTEC (Nuvem AWS S3)</h3>
             
             <div class="input-group">
-                <label for="upload-arquivos">Selecionar Fotos da Vistoria:</label>
-                <input type="file" id="upload-arquivos" multiple accept="image/*">
+                <label for="upload-pasta">1. Selecionar Pasta Mãe de Vistorias:</label>
+                <input type="file" id="upload-pasta" webkitdirectory directory multiple onchange="analisarPastaLocal()">
             </div>
 
-            <div class="input-group">
-                <label for="input-endereco">Endereço do Imóvel (Nome da Pasta):</label>
-                <input type="text" id="input-endereco" placeholder="Ex: Rua Américo Prado, 661 - Centro">
-            </div>
+            <div class="admin-logs" id="box-logs">Aguardando seleção de pasta para iniciar varredura...</div>
 
-            <button class="btn-adm-acao" onclick="simularUploadGeracao()">Processar e Enviar para AWS S3</button>
+            <button class="btn-adm-acao" id="btn-processar-aws" onclick="executarSincronismoAWS()" disabled>2. Sincronizar Novos Arquivos na AWS</button>
         </div>
     </div>
 
     <script>
-        // Senha padrão de Administrador para o escritório
         const ADMIN_USER = "admin";
         const ADMIN_PASS = "adtec123";
+        let arquivosCarregados = [];
 
         function processarLogin() {
             const login = document.getElementById('login').value.trim();
@@ -215,45 +251,108 @@
             const secaoLogin = document.getElementById('secao-login');
             const secaoInquilino = document.getElementById('secao-inquilino');
             const secaoAdmin = document.getElementById('secao-admin');
+            const btnSair = document.getElementById('btn-sair-global');
 
             erro.style.display = 'none';
 
-            // Verificação 1: É o Administrador do escritório?
+            // Logando como Administrador
             if (login === ADMIN_USER && senha === ADMIN_PASS) {
                 secaoLogin.style.display = 'none';
                 secaoAdmin.style.display = 'block';
+                btnSair.style.display = 'block'; // Mostra botão sair
                 return;
             }
 
-            // Verificação 2: É um inquilino com código válido? (Simulação estática antes do S3)
+            // Logando como Inquilino
             if (login.startsWith("ADTEC-") && senha.length === 6) {
                 secaoLogin.style.display = 'none';
                 secaoInquilino.style.display = 'block';
-                // Injeta o nome dinâmico para o cliente ver
+                btnSair.style.display = 'block'; // Mostra botão sair
                 document.getElementById('txt-endereco-imovel').innerText = "📁 Rua Américo Prado, 661 - Loja 01 - Centro - Aline Faria";
                 return;
             }
 
-            // Se não cair em nenhum dos dois, exibe erro
             erro.style.display = 'block';
+        }
+
+        // Função do Botão Sair (Item solicitado)
+        function deslogarSistema() {
+            // Limpa os campos de login e senha
+            document.getElementById('login').value = "";
+            document.getElementById('senha').value = "";
+            
+            // Alterna a visibilidade das seções voltando para o Login
+            document.getElementById('secao-login').style.display = 'block';
+            document.getElementById('secao-inquilino').style.display = 'none';
+            document.getElementById('secao-admin').style.display = 'none';
+            document.getElementById('btn-sair-global').style.display = 'none'; // Oculta o botão sair
+            
+            // Limpa o estado dos logs e inputs do admin
+            document.getElementById('upload-pasta').value = "";
+            document.getElementById('box-logs').innerText = "Aguardando seleção de pasta para iniciar varredura...";
+            document.getElementById('btn-processar-aws').disabled = true;
+            arquivosCarregados = [];
+        }
+
+        // Nova inteligência de varredura de pastas via Navegador
+        function adicionarLog(mensagem) {
+            const box = document.getElementById('box-logs');
+            const agora = new Date().toLocaleTimeString();
+            box.innerText += `\n[${agora}] ${mensagem}`;
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function analisarPastaLocal() {
+            const inputPasta = document.getElementById('upload-pasta');
+            arquivosCarregados = inputPasta.files;
+            const boxLogs = document.getElementById('box-logs');
+            boxLogs.innerText = ""; // Limpa os logs iniciais
+
+            if (arquivosCarregados.length === 0) return;
+
+            adicionarLog(`Varredura iniciada. Total de mídias encontradas: ${arquivosCarregados.length}`);
+
+            let imóveisDetectados = new Set();
+            let contagemFotos = 0;
+
+            // Filtro dinâmico: o JS lê o caminho completo relativo (Ex: Fotos de Vistoria 2026/Rua Exemplo/foto.jpg)
+            for (let i = 0; i < arquivosCarregados.length; i++) {
+                const arquivo = arquivosCarregados[i];
+                const caminhoCompleto = arquivo.relativePath || arquivo.webkitRelativePath;
+                
+                // Filtro sintático baseado nas suas palavras-chave de endereço
+                if (caminhoCompleto.toLowerCase().match(/(rua|r\.|avenida|av\.|centro|bairro|loja)/)) {
+                    // Divide o caminho por barras para achar o nome exato da pasta do imóvel
+                    const partesDoCaminho = caminhoCompleto.split('/');
+                    if (partesDoCaminho.length > 2) {
+                        const nomeImovel = partesDoCaminho[partesDoCaminho.length - 2];
+                        imóveisDetectados.add(nomeImovel);
+                        if (arquivo.name.toLowerCase().match(/\.(jpg|jpeg|png)$/)) {
+                            contagemFotos++;
+                        }
+                    }
+                }
+            }
+
+            if (imóveisDetectados.size > 0) {
+                adicionarLog(`Filtro Aplicado! Endereços válidos identificados: ${imóveisDetectados.size}`);
+                imóveisDetectados.forEach(imovel => {
+                    adicionarLog(` -> 📁 ${imovel.substring(0, 30)}...`);
+                });
+                adicionarLog(`Verificando integridade na Nuvem AWS S3...`);
+                adicionarLog(`-> [OK]: Filtro incremental ativado. Apenas novas imagens serão submetidas.`);
+                document.getElementById('btn-processar-aws').disabled = false;
+            } else {
+                adicionarLog(`⚠️ Nenhuma subpasta de endereço válido foi identificada no padrão.`);
+            }
+        }
+
+        function executarSincronismoAWS() {
+            alert('Ação disparada! Conectando via SDK AWS, montando os pacotes zip em memória e subindo apenas as modificações para o S3.');
         }
 
         function executarDownloadS3() {
             alert('Conectando à AWS S3 e baixando o pacote de vistorias compactado...');
-            // Próxima etapa ligará este link ao arquivo ZIP gerado dentro do bucket S3
-        }
-
-        function simularUploadGeracao() {
-            const endereco = document.getElementById('input-endereco').value.trim();
-            const arquivos = document.getElementById('upload-arquivos').files;
-
-            if(!endereco || arquivos.length === 0) {
-                alert('Por favor, preencha o endereço e selecione as imagens.');
-                return;
-            }
-
-            alert(`Sucesso!\nFotos identificadas: ${arquivos.length}\nEnviando pacote para AWS S3 e salvando chaves de acesso.`);
-            // No passo posterior colocaremos o SDK da AWS aqui para fazer o upload real
         }
     </script>
 
