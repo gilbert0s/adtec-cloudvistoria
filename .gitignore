@@ -11,3 +11,12 @@ Desktop.ini
 chaves_aws.txt
 credentials
 *.env
+
+# Ignorar o arquivo de chaves privadas da AWS
+config.js
+
+# Arquivos locais do sistema e da IDE
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
