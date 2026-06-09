@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADTEC CloudVistoria - Portal Unificado</title>
+    <style>
+        /* Fundo Azul Escuro */
+        body {
+            background-color: #0a192f;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            color: #333333;
+        }
+
+        /* Card Branco */
+        .card {
+            background-color: #ffffff;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+            box-sizing: border-box;
+        }
+
+        /* Letras Azuis */
+        h2 {
+            color: #0052cc;
+            margin-bottom: 25px;
+            font-size: 22px;
+        }
+
+        .input-group {
+            text-align: left;
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #0052cc;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #b3d4ff;
+            border-radius: 6px;
+            font-size: 16px;
+            color: #0033aa;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            border-color: #0052cc;
+        }
+
+        /* Botão Azul de Entrar */
+        .btn-entrar {
+            background-color: #0052cc;
+            color: white;
+            border: none;
+            padding: 14px;
+            width: 100%;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.3s;
+        }
+
+        .btn-entrar:hover {
+            background-color: #0033aa;
+        }
+
+        /* ==========================================
+           CAMADA INQUILINO: ÁREA DE DOWNLOAD
+           ========================================== */
+        .area-inquilino {
+            display: none;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        .nome-arquivo {
+            color: #0033aa;
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        /* Botão do Inquilino: Azul Claro, letras brancas, bordas arredondadas */
+        .btn-download-inquilino {
+            background-color: #4dabf7;
+            color: white;
+            border: none;
+            padding: 18px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 30px; /* Bordas bem arredondadas */
+            cursor: pointer;
+            width: 100%;
+            box-shadow: 0 4px 15px rgba(77, 171, 247, 0.4);
+            transition: background-color 0.3s, transform 0.1s;
+        }
+
+        .btn-download-inquilino:hover {
+            background-color: #339af0;
+        }
+
+        /* ==========================================
+           CAMADA ADM: PAINEL DE CONTROLE LOCAL
+           ========================================== */
+        .area-admin {
+            display: none;
+            text-align: left;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        .area-admin h3 {
+            color: #0052cc;
+            border-bottom: 2px solid #b3d4ff;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+
+        .btn-adm-acao {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 15px;
+        }
+
+        /* Mensagem de Erro */
+        .erro-msg {
+            color: #dc3545;
+            font-size: 14px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div id="secao-login">
+            <h2>Insira os dados para acessar o sistema</h2>
+            <div class="input-group">
+                <label for="login">Login ou Código:</label>
+                <input type="text" id="login" placeholder="Ex: admin ou ADTEC-K8J32">
+            </div>
+            
+            <div class="input-group">
+                <label for="senha">Senha:</label>
+                <input type="password" id="senha" placeholder="******">
+            </div>
+            
+            <button class="btn-entrar" onclick="processarLogin()">Entrar no Sistema</button>
+            <p id="erro" class="erro-msg">Credenciais incorretas. Verifique as chaves de acesso.</p>
+        </div>
+
+        <div id="secao-inquilino" class="area-inquilino">
+            <h2>Pasta de Vistoria Liberada</h2>
+            <span class="nome-arquivo" id="txt-endereco-imovel">📁 Carregando endereço do imóvel...</span>
+            <button class="btn-download-inquilino" onclick="executarDownloadS3()">Download ZIP</button>
+        </div>
+
+        <div id="secao-admin" class="area-admin">
+            <h3>Painel de Controle ADTEC (Nuvem AWS)</h3>
+            
+            <div class="input-group">
+                <label for="upload-arquivos">Selecionar Fotos da Vistoria:</label>
+                <input type="file" id="upload-arquivos" multiple accept="image/*">
+            </div>
+
+            <div class="input-group">
+                <label for="input-endereco">Endereço do Imóvel (Nome da Pasta):</label>
+                <input type="text" id="input-endereco" placeholder="Ex: Rua Américo Prado, 661 - Centro">
+            </div>
+
+            <button class="btn-adm-acao" onclick="simularUploadGeracao()">Processar e Enviar para AWS S3</button>
+        </div>
+    </div>
+
+    <script>
+        // Senha padrão de Administrador para o escritório
+        const ADMIN_USER = "admin";
+        const ADMIN_PASS = "adtec123";
+
+        function processarLogin() {
+            const login = document.getElementById('login').value.trim();
+            const senha = document.getElementById('senha').value.trim();
+            const erro = document.getElementById('erro');
+            
+            const secaoLogin = document.getElementById('secao-login');
+            const secaoInquilino = document.getElementById('secao-inquilino');
+            const secaoAdmin = document.getElementById('secao-admin');
+
+            erro.style.display = 'none';
+
+            // Verificação 1: É o Administrador do escritório?
+            if (login === ADMIN_USER && senha === ADMIN_PASS) {
+                secaoLogin.style.display = 'none';
+                secaoAdmin.style.display = 'block';
+                return;
+            }
+
+            // Verificação 2: É um inquilino com código válido? (Simulação estática antes do S3)
+            if (login.startsWith("ADTEC-") && senha.length === 6) {
+                secaoLogin.style.display = 'none';
+                secaoInquilino.style.display = 'block';
+                // Injeta o nome dinâmico para o cliente ver
+                document.getElementById('txt-endereco-imovel').innerText = "📁 Rua Américo Prado, 661 - Loja 01 - Centro - Aline Faria";
+                return;
+            }
+
+            // Se não cair em nenhum dos dois, exibe erro
+            erro.style.display = 'block';
+        }
+
+        function executarDownloadS3() {
+            alert('Conectando à AWS S3 e baixando o pacote de vistorias compactado...');
+            // Próxima etapa ligará este link ao arquivo ZIP gerado dentro do bucket S3
+        }
+
+        function simularUploadGeracao() {
+            const endereco = document.getElementById('input-endereco').value.trim();
+            const arquivos = document.getElementById('upload-arquivos').files;
+
+            if(!endereco || arquivos.length === 0) {
+                alert('Por favor, preencha o endereço e selecione as imagens.');
+                return;
+            }
+
+            alert(`Sucesso!\nFotos identificadas: ${arquivos.length}\nEnviando pacote para AWS S3 e salvando chaves de acesso.`);
+            // No passo posterior colocaremos o SDK da AWS aqui para fazer o upload real
+        }
+    </script>
+
+</body>
+</html>

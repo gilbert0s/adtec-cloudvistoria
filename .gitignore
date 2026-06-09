@@ -1,16 +1,13 @@
-# Ignorar arquivos de credenciais de nuvem (Segurança Crítica)
-credenciais.json
-*.json
-
-# Ignorar arquivos locais de teste e arquivos temporários do Windows
-Acesso Online.txt
-Acesso Online.TXT
-*.zip
+# Ignorar arquivos de configuração local do sistema operacional
 Thumbs.db
 Desktop.ini
+.DS_Store
 
-# Ignorar pastas de ambiente virtual do Python ou cache
-__pycache__/
-*.pyc
-.venv/
-env/
+# Ignorar pastas de configuração de IDEs
+.vscode/
+.idea/
+
+# SEURANÇA CRÍTICA: Ignorar arquivos onde possamos salvar chaves da AWS temporariamente
+chaves_aws.txt
+credentials
+*.env
