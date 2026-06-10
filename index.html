@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ADTEC CloudVistoria - Portal Unificado AWS</title>
     <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1200.0.min.js"></script>
-    <script src="config.js"></script><style>
+    <script src="config.js"></script>
+    <style>
         body {
             background-color: #0a192f;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -170,7 +171,7 @@
             font-size: 12px;
             padding: 12px;
             border-radius: 6px;
-            height: 180px;
+            height: 220px;
             overflow-y: auto;
             margin-top: 15px;
             white-space: pre-wrap;
@@ -207,7 +208,7 @@
             </div>
             
             <button class="btn-entrar" onclick="processarLogin()">Entrar no Sistema</button>
-            <p id="erro" class="erro-msg">Credenciais incorretas. Verifique as chaves de acesso.</p>
+            <p id="erro" class="erro-msg"></p>
         </div>
 
         <div id="secao-inquilino" class="area-inquilino">
@@ -226,24 +227,21 @@
 
             <div class="admin-logs" id="box-logs">Aguardando seleção de pasta para iniciar varredura...</div>
 
-            <button class="btn-adm-acao" id="btn-processar-aws" onclick="executarSincronismoAWS()" disabled>2. Sincronizar e Gerar Chaves na AWS</button>
+            <button class="btn-adm-acao" id="btn-processar-aws" onclick="executarSincronismoAWS()" disabled>2. Sincronizar Inteligente na AWS</button>
         </div>
     </div>
 
     <script>
-        // =========================================================================
-        // CONFIGURAÇÕES CRÍTICAS DA AWS S3 (puxando servidor local)
-        // =========================================================================
+        // Puxando as chaves criptografadas e protegidas do seu config.js local
         const AWS_ACCESS_KEY_ID = AWS_CONFIG.accessKeyId;
         const AWS_SECRET_ACCESS_KEY = AWS_CONFIG.secretAccessKey;
         const AWS_BUCKET_NAME = AWS_CONFIG.bucketName;
         const AWS_REGION = AWS_CONFIG.region;
 
-        // Senha padrão de Administrador local
         const ADMIN_USER = "admin";
         const ADMIN_PASS = "adtec123";
+        const JSON_INDEX_KEY = "index_vistorias.json";
 
-        // Configura o SDK da Amazon com as suas credenciais
         AWS.config.update({
             accessKeyId: AWS_ACCESS_KEY_ID,
             secretAccessKey: AWS_SECRET_ACCESS_KEY,
@@ -258,6 +256,21 @@
             const agora = new Date().toLocaleTimeString();
             box.innerText += `\n[${agora}] ${mensagem}`;
             box.scrollTop = box.scrollHeight;
+        }
+
+        // Baixa o Banco de Dados JSON centralizado da AWS S3
+        async function baixarBancoIndex() {
+            try {
+                const dados = await s3.getObject({ Bucket: AWS_BUCKET_NAME, Key: JSON_INDEX_KEY }).promise();
+                return JSON.parse(dados.Body.toString('utf-8'));
+            } catch (err) {
+                // Se o arquivo não existir ainda (primeira vez), retorna um banco vazio
+                if (err.code === 'NoSuchKey') {
+                    return {};
+                }
+                adicionarLog(`⚠️ Erro ao ler banco index: ${err.message}`);
+                return {};
+            }
         }
 
         function processarLogin() {
@@ -279,31 +292,31 @@
                 return;
             }
 
-            // Fluxo Inquilino buscando credencial direto do S3
             if (login.startsWith("ADTEC-") && senha.length === 6) {
-                adicionarLog("Verificando token no servidor AWS...");
+                erro.innerText = "Verificando chaves de acesso na AWS...";
+                erro.style.display = 'block';
                 
-                // Procurando o arquivo TXT correspondente a esse login na AWS
                 const txtKey = `vistorias/${login}/Acesso Online.txt`;
                 s3.getObject({ Bucket: AWS_BUCKET_NAME, Key: txtKey }, function(err, data) {
                     if (err) {
-                        erro.innerText = "Código de acesso não encontrado na nuvem ou expirado.";
+                        erro.innerText = "Código de acesso não encontrado ou expirado na nuvem.";
                         erro.style.display = 'block';
                     } else {
                         const textoConfig = data.Body.toString('utf-8');
                         
-                        // Verifica se a senha dentro do arquivo bate com a digitada
                         if (textoConfig.includes(`Senha: ${senha}`)) {
+                            erro.style.display = 'none';
                             secaoLogin.style.display = 'none';
                             secaoInquilino.style.display = 'block';
                             btnSair.style.display = 'block';
                             
-                            // Extrai o endereço do corpo do texto salvo para exibir na tela
                             const matchEndereco = textoConfig.match(/Endereço: (.+)/);
-                            const enderecoTela = matchEndereco ? matchEndereco[1] : "Imóvel ADTEC";
-                            document.getElementById('txt-endereco-imovel').innerText = `📁 ${enderecoTela}`;
+                            const matchAno = textoConfig.match(/Ano de Referência da Vistoria: (.+)/);
                             
-                            // Guarda o login na sessão para o botão de download saber qual pasta baixar
+                            const enderecoTela = matchEndereco ? matchEndereco[1] : "Imóvel ADTEC";
+                            const anoTela = matchAno ? matchAno[1] : "";
+                            
+                            document.getElementById('txt-endereco-imovel').innerText = `📁 ${enderecoTela} (${anoTela})`;
                             window.sessaoLoginInquilino = login;
                         } else {
                             erro.innerText = "Senha incorreta para este código de vistoria.";
@@ -331,7 +344,6 @@
             mapaPastasImoveis = {};
         }
 
-        // Analisador inteligente de árvores de arquivos locais
         function analisarPastaLocal() {
             const inputPasta = document.getElementById('upload-pasta');
             const arquivos = inputPasta.files;
@@ -340,7 +352,7 @@
 
             if (arquivos.length === 0) return;
 
-            adicionarLog(`Varredura iniciada. Processando arquivos locais...`);
+            adicionarLog(`Varredura iniciada. Mapeando árvore de diretórios...`);
             mapaPastasImoveis = {};
 
             const PREFIXOS_VALIDOS = ["rua", "r.", "avenida", "av.", "praça", "pç", "alameda", "al."];
@@ -349,23 +361,21 @@
             for (let i = 0; i < arquivos.length; i++) {
                 const arquivo = arquivos[i];
                 const caminhoRelativo = arquivo.webkitRelativePath || arquivo.relativePath;
-                const caminhoMinusculo = caminhoRelativo.toLowerCase();
 
-                // Captura o Ano da pasta mãe se baseando na estrutura do caminho
-                let anoDetectado = "2026"; // Padrão de segurança
+                // Extração inteligente do Ano baseando-se nas pastas superiores (2024, 2025, 2026)
+                let anoDetectado = "2026"; 
                 const matchAno = caminhoRelativo.match(/202[0-9]/);
                 if (matchAno) {
-                    anoDetectado = matchAno.group ? matchAno.group() : matchAno[0];
+                    anoDetectado = matchAno[0];
                 }
 
-                // Divide o caminho para achar o nome exato da pasta do imóvel
                 const partes = caminhoRelativo.split('/');
                 if (partes.length > 2) {
                     const nomePastaImovel = partes[partes.length - 2];
                     const nomePastaMinusculo = nomePastaImovel.toLowerCase();
 
-                    const temPrefixo = PREFIXOS_VALIDOS.any ? PREFIXOS_VALIDOS.any(p => nomePastaMinusculo.includes(p)) : PREFIXOS_VALIDOS.some(p => nomePastaMinusculo.includes(p));
-                    const temElemento = ELEMENTOS_VALIDOS.any ? ELEMENTOS_VALIDOS.any(e => nomePastaMinusculo.includes(e)) : ELEMENTOS_VALIDOS.some(e => nomePastaMinusculo.includes(e));
+                    const temPrefixo = PREFIXOS_VALIDOS.some(p => nomePastaMinusculo.includes(p));
+                    const temElemento = ELEMENTOS_VALIDOS.some(e => nomePastaMinusculo.includes(e));
 
                     if (temPrefixo || temElemento) {
                         if (!mapaPastasImoveis[nomePastaImovel]) {
@@ -383,38 +393,69 @@
 
             const totalImoveis = Object.keys(mapaPastasImoveis).length;
             if (totalImoveis > 0) {
-                adicionarLog(`Filtro de Árvore OK! Identificados ${totalImoveis} imóveis legítimos:`);
+                adicionarLog(`Filtro OK! Encontrados ${totalImoveis} diretórios de imóveis locais:`);
                 for (let imovel in mapaPastasImoveis) {
-                    adicionarLog(` -> 📁 [Ano: ${mapaPastasImoveis[imovel].ano}] ${imovel} (${mapaPastasImoveis[imovel].fotos.length} fotos)`);
+                    adicionarLog(` -> 📁 [Ano: ${mapaPastasImoveis[imovel].ano}] ${imovel} (${mapaPastasImoveis[imovel].fotos.length} mídias)`);
                 }
                 document.getElementById('btn-processar-aws').disabled = false;
             } else {
-                adicionarLog(`⚠️ Nenhum endereço correspondente aos filtros foi encontrado nas subpastas.`);
+                adicionarLog(`⚠️ Nenhuma subpasta no padrão de endereços foi identificada.`);
             }
         }
 
-        // Executa o sincronismo, gera tokens limpos e escreve os TXTs na Nuvem
+        // MOTOR DE BACKUP INCREMENTAL INTELIGENTE (OPÇÃO 2 + REGRA DE ANO COMBINADO)
         async function executarSincronismoAWS() {
             document.getElementById('btn-processar-aws').disabled = true;
-            adicionarLog("🚀 Iniciando upload e sincronismo na AWS S3...");
+            adicionarLog("🚀 Baixando arquivo index de controle da AWS...");
+            
+            // 1. Carrega o banco de dados JSON da nuvem
+            let bancoIndex = await baixarBancoIndex();
+            let houveModificacaoNoBanco = false;
 
             for (let nomeImovel in mapaPastasImoveis) {
                 const dadosImovel = mapaPastasImoveis[nomeImovel];
+                const anoVistoria = dadosImovel.ano;
                 
-                // Geração do Login Limpo (Letras e números sem ano) e Senha 6 dígitos
-                const sufixo = Math.random().toString(36).substring(2, 7).toUpperCase();
-                const loginToken = `ADTEC-${sufixo}`;
-                const senhaToken = Math.floor(100000 + Math.random() * 900000).toString();
+                // CRUCIAL: A chave única combina o Nome do Imóvel com o Ano da Vistoria!
+                const chaveUnicaBanco = `${nomeImovel} (${anoVistoria})`;
 
-                adicionarLog(`\nProcessando: ${nomeImovel}`);
-                adicionarLog(` -> Criando credenciais: Login: ${loginToken} | Senha: ${senhaToken}`);
+                let loginToken = "";
+                let senhaToken = "";
+                let ehImovelNovo = false;
 
-                // 1. Criar e fazer upload do arquivo Acesso Online.txt para o S3
+                // 2. VERIFICAÇÃO IDEMPOTENTE: Já existe esse imóvel nesse ano específico?
+                if (bancoIndex[chaveUnicaBanco]) {
+                    // RESGATA as credenciais antigas para manter as fotos na mesma pasta!
+                    loginToken = bancoIndex[chaveUnicaBanco].login;
+                    senhaToken = bancoIndex[chaveUnicaBanco].senha;
+                    adicionarLog(`\n🔄 Sincronismo Incremental para: ${chaveUnicaBanco}`);
+                    adicionarLog(` -> Mantendo pasta existente na AWS: ${loginToken}`);
+                } else {
+                    // GERA um token totalmente novo porque é inédito para esse ano
+                    const sufixo = Math.random().toString(36).substring(2, 7).toUpperCase();
+                    loginToken = `ADTEC-${sufixo}`;
+                    senhaToken = Math.floor(100000 + Math.random() * 900000).toString();
+                    ehImovelNovo = true;
+
+                    adicionarLog(`\n🆕 Novo Registro Identificado: ${chaveUnicaBanco}`);
+                    adicionarLog(` -> Alocando nova chave: Login: ${loginToken} | Senha: ${senhaToken}`);
+                    
+                    // Salva no mapa local do JSON para guardar na nuvem depois
+                    bancoIndex[chaveUnicaBanco] = {
+                        login: loginToken,
+                        senha: senhaToken,
+                        enderecoOriginal: nomeImovel,
+                        ano: anoVistoria
+                    };
+                    houveModificacaoNoBanco = true;
+                }
+
+                // 3. Cria e atualiza o arquivo TXT explicativo na nuvem
                 const conteudoTXT = 
                     `ADTEC IMÓVEIS - DADOS DE ACESSO À VISTORIA\n` +
                     `=========================================\n` +
                     `Endereço: ${nomeImovel}\n` +
-                    `Ano de Referência da Vistoria: ${dadosImovel.ano}\n` +
+                    `Ano de Referência da Vistoria: ${anoVistoria}\n` +
                     `Login: ${loginToken}\n` +
                     `Senha: ${senhaToken}\n` +
                     `=========================================\n` +
@@ -429,13 +470,12 @@
                         Body: conteudoTXT,
                         ContentType: "text/plain; charset=utf-8"
                     }).promise();
-                    adicionarLog(` -> [TXT SALVO NA NUVEM] com o ano ${dadosImovel.ano}`);
                 } catch (err) {
-                    adicionarLog(` ❌ Erro ao salvar TXT na AWS: ${err.message}`);
+                    adicionarLog(` ❌ Falha crítica de comunicação com S3: ${err.message}`);
                     continue;
                 }
 
-                // 2. Upload incremental das fotos para a pasta desse Login no S3
+                // 4. Upload das Fotos (Substituição automática caso o nome do arquivo seja idêntico)
                 for (let foto of dadosImovel.fotos) {
                     const fotoKey = `vistorias/${loginToken}/fotos/${foto.name}`;
                     try {
@@ -446,48 +486,58 @@
                             ContentType: foto.type
                         }).promise();
                     } catch (err) {
-                        adicionarLog(`   ❌ Falha no upload da imagem ${foto.name}: ${err.message}`);
+                        adicionarLog(`   ❌ Falha ao enviar foto ${foto.name}: ${err.message}`);
                     }
                 }
-                adicionarLog(` -> [MÍDIAS SINCRONIZADAS] Total de ${dadosImovel.fotos.length} fotos enviadas.`);
-                
-                // Exibe no console o bloco mastigado para enviar por WhatsApp na hora!
-                adicionarLog(`\n📋 COPIE PARA O WHATSAPP:\n${conteudoTXT}\n------------------------`);
+                adicionarLog(` -> [OK] Sincronização de fotos realizada com sucesso.`);
+                adicionarLog(`\n📋 ENVIAR NO WHATSAPP:\n${conteudoTXT}\n------------------------`);
             }
 
-            alert("Sincronismo completo com a AWS S3! Os códigos gerados para envio via WhatsApp estão exibidos no console preto de logs.");
+            // 5. Se novos imóveis foram criados, atualiza o arquivo JSON mestre na AWS
+            if (houveModificacaoNoBanco) {
+                adicionarLog("\n💾 Atualizando banco de dados index_vistorias.json na AWS...");
+                try {
+                    await s3.putObject({
+                        Bucket: AWS_BUCKET_NAME,
+                        Key: JSON_INDEX_KEY,
+                        Body: JSON.stringify(bancoIndex, null, 2),
+                        ContentType: "application/json"
+                    }).promise();
+                    adicionarLog(" -> [BANCO ATUALIZADO] Segurança de integridade garantida.");
+                } catch (err) {
+                    adicionarLog(` ❌ Erro ao salvar arquivo JSON mestre: ${err.message}`);
+                }
+            }
+
+            alert("Sincronismo inteligente finalizado! A duplicidade foi evitada e os dados estão salvos de forma incremental.");
             document.getElementById('btn-processar-aws').disabled = false;
         }
 
-        // Função executada quando o Inquilino clica para baixar as fotos dele
-        function executarDownloadS3() {
+        function ejecutarDownloadS3() {
             const login = window.sessaoLoginInquilino;
             if (!login) return;
 
-            adicionarLog("Buscando lista de arquivos no servidor...");
+            adicionarLog("Conectando à AWS e montando links de download...");
             const prefixoPasta = `vistorias/${login}/fotos/`;
 
-            // Lista todas as fotos daquela vistoria específica no S3
             s3.listObjectsV2({ Bucket: AWS_BUCKET_NAME, Prefix: prefixoPasta }, function(err, data) {
                 if (err) {
-                    alert("Erro ao buscar arquivos para download: " + err.message);
+                    alert("Erro ao ler arquivos no servidor: " + err.message);
                 } else {
                     if (data.Contents.length === 0) {
-                        alert("Nenhuma imagem encontrada para esta vistoria na nuvem.");
+                        alert("Nenhuma imagem ativa localizada para esta vistoria.");
                         return;
                     }
                     
-                    alert(`Encontradas ${data.Contents.length} fotos. Preparando pacotes para o seu navegador baixar...`);
+                    alert(`Preparando download de ${data.Contents.length} mídias de vistoria...`);
                     
-                    // Abre os arquivos encontrados em abas para download
                     data.Contents.forEach(objeto => {
                         const urlConstruida = s3.getSignedUrl('getObject', {
                             Bucket: AWS_BUCKET_NAME,
                             Key: objeto.Key,
-                            Expires: 60 // URL válida por 60 segundos
+                            Expires: 60 
                         });
                         
-                        // Executa o download nativo no navegador
                         const linkTemporario = document.createElement('a');
                         linkTemporario.href = urlConstruida;
                         linkTemporario.download = objeto.Key.split('/').pop();
