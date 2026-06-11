@@ -214,10 +214,10 @@
         <div id="secao-inquilino" class="area-inquilino">
             <h2>Pasta de Vistoria Liberada</h2>
             <span class="nome-arquivo" id="txt-endereco-imovel">📁 Carregando dados da AWS...</span>
-            <button class="btn-download-inquilino" onclick="executarDownloadS3()">Download ZIP das Fotos</button>
+            <button class="btn-download-inquilino" onclick="executarDownloadS3()">Download de Todas as Mídias</button>
         </div>
 
-        <div id="secao-admin" class="area-admin">
+        <div class="area-admin" id="secao-admin">
             <h3>Painel de Controle ADTEC (Nuvem AWS S3)</h3>
             
             <div class="input-group">
@@ -227,12 +227,11 @@
 
             <div class="admin-logs" id="box-logs">Aguardando seleção de pasta para iniciar varredura...</div>
 
-            <button class="btn-adm-acao" id="btn-processar-aws" onclick="executarSincronismoAWS()" disabled>2. Sincronizar Inteligente na AWS</button>
+            <button class="btn-adm-acao" id="btn-processar-aws" onclick="executarSincronismoAWS()" disabled>2. Sincronizar Tudo na AWS</button>
         </div>
     </div>
 
     <script>
-        // Puxando as chaves criptografadas e protegidas do seu config.js local
         const AWS_ACCESS_KEY_ID = AWS_CONFIG.accessKeyId;
         const AWS_SECRET_ACCESS_KEY = AWS_CONFIG.secretAccessKey;
         const AWS_BUCKET_NAME = AWS_CONFIG.bucketName;
@@ -258,13 +257,11 @@
             box.scrollTop = box.scrollHeight;
         }
 
-        // Baixa o Banco de Dados JSON centralizado da AWS S3
         async function baixarBancoIndex() {
             try {
                 const dados = await s3.getObject({ Bucket: AWS_BUCKET_NAME, Key: JSON_INDEX_KEY }).promise();
                 return JSON.parse(dados.Body.toString('utf-8'));
             } catch (err) {
-                // Se o arquivo não existir ainda (primeira vez), retorna um banco vazio
                 if (err.code === 'NoSuchKey') {
                     return {};
                 }
@@ -344,6 +341,7 @@
             mapaPastasImoveis = {};
         }
 
+        // AGORA 100% SEM FILTROS DE EXTENSÃO: TUDO ENTRA NO EMBARQUE
         function analisarPastaLocal() {
             const inputPasta = document.getElementById('upload-pasta');
             const arquivos = inputPasta.files;
@@ -360,16 +358,15 @@
 
             for (let i = 0; i < arquivos.length; i++) {
                 const arquivo = arquivos[i];
-                const caminhoRelativo = arquivo.webkitRelativePath || arquivo.relativePath;
+                const caminoRelativo = arquivo.webkitRelativePath || arquivo.relativePath;
 
-                // Extração inteligente do Ano baseando-se nas pastas superiores (2024, 2025, 2026)
                 let anoDetectado = "2026"; 
-                const matchAno = caminhoRelativo.match(/202[0-9]/);
+                const matchAno = caminoRelativo.match(/202[0-9]/);
                 if (matchAno) {
                     anoDetectado = matchAno[0];
                 }
 
-                const partes = caminhoRelativo.split('/');
+                const partes = caminoRelativo.split('/');
                 if (partes.length > 2) {
                     const nomePastaImovel = partes[partes.length - 2];
                     const nomePastaMinusculo = nomePastaImovel.toLowerCase();
@@ -381,21 +378,21 @@
                         if (!mapaPastasImoveis[nomePastaImovel]) {
                             mapaPastasImoveis[nomePastaImovel] = {
                                 ano: anoDetectado,
-                                fotos: []
+                                fotos: [] // Mantido o nome técnico da variável por compatibilidade
                             };
                         }
-                        if (arquivo.name.toLowerCase().match(/\.(jpg|jpeg|png)$/)) {
-                            mapaPastasImoveis[nomePastaImovel].fotos.push(arquivo);
-                        }
+                        
+                        // REMOVIDO FILTRO DE IMAGEM: Qualquer arquivo que esteja na pasta vai entrar para o upload
+                        mapaPastasImoveis[nomePastaImovel].fotos.push(arquivo);
                     }
                 }
             }
 
             const totalImoveis = Object.keys(mapaPastasImoveis).length;
             if (totalImoveis > 0) {
-                adicionarLog(`Filtro OK! Encontrados ${totalImoveis} diretórios de imóveis locais:`);
+                adicionarLog(`Filtro de Endereço OK! Encontrados ${totalImoveis} diretórios na fila:`);
                 for (let imovel in mapaPastasImoveis) {
-                    adicionarLog(` -> 📁 [Ano: ${mapaPastasImoveis[imovel].ano}] ${imovel} (${mapaPastasImoveis[imovel].fotos.length} mídias)`);
+                    adicionarLog(` -> 📁 [Ano: ${mapaPastasImoveis[imovel].ano}] ${imovel} (${mapaPastasImoveis[imovel].fotos.length} arquivos detectados)`);
                 }
                 document.getElementById('btn-processar-aws').disabled = false;
             } else {
@@ -403,61 +400,79 @@
             }
         }
 
-        // MOTOR DE BACKUP INCREMENTAL INTELIGENTE (OPÇÃO 2 + REGRA DE ANO COMBINADO)
+        async function limparFotosAntigasNoS3(loginToken) {
+            const prefixoPasta = `vistorias/${loginToken}/fotos/`;
+            try {
+                const objetos = await s3.listObjectsV2({ Bucket: AWS_BUCKET_NAME, Prefix: prefixoPasta }).promise();
+                if (!objetos.Contents || objetos.Contents.length === 0) {
+                    return;
+                }
+
+                const listaExclusao = objetos.Contents.map(objeto => ({ Key: objeto.Key }));
+                await s3.deleteObjects({
+                    Bucket: AWS_BUCKET_NAME,
+                    Delete: { Objects: listaExclusao }
+                }).promise();
+                
+                adicionarLog(`   -> [CLEANUP] Diretório antigo limpo na AWS.`);
+            } catch (err) {
+                adicionarLog(`   ⚠️ Alerta de integridade durante a limpeza: ${err.message}`);
+            }
+        }
+
+        // MOTOR DE BACKUP TOTAL E INCREMENTAL
         async function executarSincronismoAWS() {
             document.getElementById('btn-processar-aws').disabled = true;
             adicionarLog("🚀 Baixando arquivo index de controle da AWS...");
             
-            // 1. Carrega o banco de dados JSON da nuvem
-            let bancoIndex = await baixarBancoIndex();
+            let bancoIndex;
+            try {
+                bancoIndex = await baixarBancoIndex();
+            } catch (bancoErr) {
+                adicionarLog(` ❌ Erro ao inicializar index: ${bancoErr.message}`);
+                document.getElementById('btn-processar-aws').disabled = false;
+                return;
+            }
+            
             let houveModificacaoNoBanco = false;
 
             for (let nomeImovel in mapaPastasImoveis) {
                 const dadosImovel = mapaPastasImoveis[nomeImovel];
                 const anoVistoria = dadosImovel.ano;
-                
-                // CRUCIAL: A chave única combina o Nome do Imóvel com o Ano da Vistoria!
                 const chaveUnicaBanco = `${nomeImovel} (${anoVistoria})`;
 
                 let loginToken = "";
-                let senhaToken = "";
-                let ehImovelNovo = false;
+                let senderPass = ""; 
+                let precisaLimparS3 = false;
 
-                // 2. VERIFICAÇÃO IDEMPOTENTE: Já existe esse imóvel nesse ano específico?
                 if (bancoIndex[chaveUnicaBanco]) {
-                    // RESGATA as credenciais antigas para manter as fotos na mesma pasta!
                     loginToken = bancoIndex[chaveUnicaBanco].login;
-                    senhaToken = bancoIndex[chaveUnicaBanco].senha;
-                    adicionarLog(`\n🔄 Sincronismo Incremental para: ${chaveUnicaBanco}`);
-                    adicionarLog(` -> Mantendo pasta existente na AWS: ${loginToken}`);
+                    senderPass = bancoIndex[chaveUnicaBanco].senha;
+                    precisaLimparS3 = true; 
+                    adicionarLog(`\n🔄 Sincronismo Incremental detectado para: ${chaveUnicaBanco}`);
                 } else {
-                    // GERA um token totalmente novo porque é inédito para esse ano
                     const sufixo = Math.random().toString(36).substring(2, 7).toUpperCase();
                     loginToken = `ADTEC-${sufixo}`;
-                    senhaToken = Math.floor(100000 + Math.random() * 900000).toString();
-                    ehImovelNovo = true;
+                    senderPass = Math.floor(100000 + Math.random() * 900000).toString();
 
                     adicionarLog(`\n🆕 Novo Registro Identificado: ${chaveUnicaBanco}`);
-                    adicionarLog(` -> Alocando nova chave: Login: ${loginToken} | Senha: ${senhaToken}`);
                     
-                    // Salva no mapa local do JSON para guardar na nuvem depois
                     bancoIndex[chaveUnicaBanco] = {
                         login: loginToken,
-                        senha: senhaToken,
+                        senha: senderPass,
                         enderecoOriginal: nomeImovel,
                         ano: anoVistoria
                     };
                     houveModificacaoNoBanco = true;
                 }
 
-                // 3. Cria e atualiza o arquivo TXT explicativo na nuvem
                 const conteudoTXT = 
                     `ADTEC IMÓVEIS - DADOS DE ACESSO À VISTORIA\n` +
                     `=========================================\n` +
                     `Endereço: ${nomeImovel}\n` +
                     `Ano de Referência da Vistoria: ${anoVistoria}\n` +
                     `Login: ${loginToken}\n` +
-                    `Senha: ${senhaToken}\n` +
+                    `Senha: ${senderPass}\n` +
                     `=========================================\n` +
                     `Copie os dados acima para enviar ao inquilino por WhatsApp.`;
 
@@ -475,25 +490,36 @@
                     continue;
                 }
 
-                // 4. Upload das Fotos (Substituição automática caso o nome do arquivo seja idêntico)
-                for (let foto of dadosImovel.fotos) {
-                    const fotoKey = `vistorias/${loginToken}/fotos/${foto.name}`;
+                if (precisaLimparS3) {
+                    adicionarLog(` -> Faxina preventiva iniciada na pasta da AWS...`);
+                    await limparFotosAntigasNoS3(loginToken);
+                }
+
+                adicionarLog(` -> Enviando lote completo de arquivos (${dadosImovel.fotos.length} itens)...`);
+                
+                for (const arquivo of dadosImovel.fotos) {
+                    const arquivoKey = `vistorias/${loginToken}/fotos/${arquivo.name}`;
+                    
+                    // MECANISMO ANTI-TRAVAMENTO DE EXTENSÃO: Se vier sem tipo, força um formato binário aceitável
+                    const tipoDetectado = arquivo.type || "application/octet-stream";
+                    
                     try {
+                        adicionarLog(`   -> Upload: ${arquivo.name} ...`);
                         await s3.putObject({
                             Bucket: AWS_BUCKET_NAME,
-                            Key: fotoKey,
-                            Body: foto,
-                            ContentType: foto.type
+                            Key: arquivoKey,
+                            Body: arquivo,
+                            ContentType: tipoDetectado
                         }).promise();
+                        adicionarLog(`   -> [SUCESSO] ${arquivo.name} enviado.`);
                     } catch (err) {
-                        adicionarLog(`   ❌ Falha ao enviar foto ${foto.name}: ${err.message}`);
+                        adicionarLog(`   ❌ Falha ao enviar ${arquivo.name}: ${err.message}`);
                     }
                 }
-                adicionarLog(` -> [OK] Sincronização de fotos realizada com sucesso.`);
+                adicionarLog(` -> [OK] Sincronização finalizada com integridade de espelho.`);
                 adicionarLog(`\n📋 ENVIAR NO WHATSAPP:\n${conteudoTXT}\n------------------------`);
             }
 
-            // 5. Se novos imóveis foram criados, atualiza o arquivo JSON mestre na AWS
             if (houveModificacaoNoBanco) {
                 adicionarLog("\n💾 Atualizando banco de dados index_vistorias.json na AWS...");
                 try {
@@ -509,7 +535,7 @@
                 }
             }
 
-            alert("Sincronismo inteligente finalizado! A duplicidade foi evitada e os dados estão salvos de forma incremental.");
+            alert("Sincronismo inteligente finalizado! Todos os arquivos da pasta foram espelhados com sucesso.");
             document.getElementById('btn-processar-aws').disabled = false;
         }
 
@@ -525,11 +551,11 @@
                     alert("Erro ao ler arquivos no servidor: " + err.message);
                 } else {
                     if (data.Contents.length === 0) {
-                        alert("Nenhuma imagem ativa localizada para esta vistoria.");
+                        alert("Nenhum arquivo ativo localizado para esta vistoria.");
                         return;
                     }
                     
-                    alert(`Preparando download de ${data.Contents.length} mídias de vistoria...`);
+                    alert(`Preparando download de ${data.Contents.length} arquivos de vistoria...`);
                     
                     data.Contents.forEach(objeto => {
                         const urlConstruida = s3.getSignedUrl('getObject', {
