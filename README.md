@@ -5,7 +5,7 @@
 **Módulo:** Computação em Nuvem e Qualidade de Software
 **Período:** 2º Trimestre Letivo de 2026
 
----
+----
 
 ## 👥 Integrantes do Grupo (Desenvolvedores)
 * **Ana Jaqueline da Costa França** - RA: 24000520
@@ -17,7 +17,7 @@
 * **Qualidade de Software:** Prof. Nivaldo de Andrade
 * **Projeto Integrado:** Prof. Mariangela Martimbianco Santos
 
----
+----
 
 ## 📝 Sobre o Projeto
 O **ADTEC CloudVistoria** é uma aplicação web unificada desenvolvida como solução de impacto real para a imobiliária parceira **ADTEC**. O foco principal é modernizar o processo arcaico de armazenamento de vistorias residenciais, eliminando gargalos físicos de hardware local através da transição para uma infraestrutura 100% em nuvem.
@@ -29,7 +29,7 @@ O **ADTEC CloudVistoria** é uma aplicação web unificada desenvolvida como sol
 * **Faxina Preventiva (Cleanup):** Rotina assíncrona baseada em Promises estruturadas (`async/await`) que limpa mídias obsoletas na AWS antes de subir novas atualizações, garantindo a integridade estrita do espelhamento de pastas.
 * **Resiliência de Extensões:** O motor aceita qualquer formato de arquivo enviado pelo dispositivo móvel (como imagens modernas `.avif`, relatórios em `.docx` ou `.pdf`) sem exigir renomeação manual do usuário.
 
----
+----
 
 ## 🏗️ Arquitetura e Tecnologias
 * **Frontend:** HTML5, CSS3, JavaScript Vanilla
@@ -37,7 +37,7 @@ O **ADTEC CloudVistoria** é uma aplicação web unificada desenvolvida como sol
 * **Serviços Utilizados:** Amazon S3 (Simple Storage Service) - Modelo IaaS
 * **Controle de Versão:** Git e GitHub
 
----
+----
 
 ## 🔒 Segurança da Informação
 O projeto segue rígidos padrões contra vazamentos de credenciais (*Secret Leaks*). Todas as chaves e tokens de acesso da AWS foram estritamente isolados em um arquivo de configuração local (`config.js`), o qual encontra-se devidamente blindado e ignorado pelo repositório público através das regras do arquivo de governança `.gitignore`.
